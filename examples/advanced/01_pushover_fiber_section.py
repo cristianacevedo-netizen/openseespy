@@ -180,7 +180,8 @@ print("Pushover Analysis Results")
 print("=" * 60)
 print(f"Maximum displacement reached: {max(disp_history):.4f} in")
 print(f"Maximum base shear: {max(force_history):.4f} kip")
-print(f"Yield displacement (approx): {disp_history[np.argmax(np.diff(force_history) < 0)]:.4f} in")
+# Note: Yield displacement calculation is approximate and should be
+# determined by more sophisticated methods in practice (e.g., bilinear fit)
 print("=" * 60)
 
 # Clean up

@@ -149,7 +149,7 @@ Para usuarios expertos:
 ### "Analysis failed to converge"
 **Solución**:
 ```python
-# Reduce paso de carga
+# Reducir paso de carga
 ops.integrator('DisplacementControl', 2, 1, 0.01)  # más pequeño
 
 # Cambia algoritmo

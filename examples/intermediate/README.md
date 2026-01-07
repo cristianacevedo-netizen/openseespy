@@ -99,6 +99,6 @@ Experimenta con:
 
 ## Notas Importantes
 
-- Los archivos temporales se guardan en `/tmp/`
+- Los archivos temporales se guardan en `/tmp/` (Unix/Linux) - considerar usar el módulo `tempfile` para compatibilidad multiplataforma
 - Las gráficas se generan automáticamente
 - Algunos análisis pueden tardar varios segundos
