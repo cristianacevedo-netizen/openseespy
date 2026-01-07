@@ -21,9 +21,12 @@ ops.model('basic', '-ndm', 2, '-ndf', 2)
 ops.node(1, 0.0, 0.0)
 ops.node(2, 120.0, 0.0)
 
-# Fix node 1 (support)
+# Fix node 1 (support) - both DOF fixed
 # fix(nodeTag, dx, dy)
 ops.fix(1, 1, 1)
+
+# Fix node 2 in Y direction only (roller support)
+ops.fix(2, 0, 1)
 
 # Define material
 # uniaxialMaterial(matType, matTag, E)
@@ -41,7 +44,7 @@ ops.pattern('Plain', 1, 1)
 
 # Apply load at node 2
 # load(nodeTag, Fx, Fy)
-ops.load(2, 100.0, -50.0)
+ops.load(2, 100.0, 0.0)  # Only horizontal load since Y is fixed
 
 # Analysis setup
 ops.system('BandSPD')
