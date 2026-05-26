@@ -15,6 +15,7 @@ RISK_PROFILES = {
     "moderado": {"w_prob": 0.40, "w_ret": 0.40, "w_vol": 0.20},
     "agresivo": {"w_prob": 0.25, "w_ret": 0.60, "w_vol": 0.15},
 }
+CERTAINTY_MARGIN_SCALE = 200.0
 
 
 @dataclass
@@ -82,7 +83,7 @@ def recommend_for_date(
     top = ranked[0]
     second = ranked[1] if len(ranked) > 1 else ranked[0]
     margin = max(top["score"] - second["score"], 0.0)
-    certainty_pct = float(np.clip(50.0 + margin * 200.0, 50.0, 99.0))
+    certainty_pct = float(np.clip(50.0 + margin * CERTAINTY_MARGIN_SCALE, 50.0, 99.0))
 
     return DailyRecommendation(
         date=str(pd.to_datetime(day).date()),

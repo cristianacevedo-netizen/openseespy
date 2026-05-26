@@ -10,6 +10,8 @@ from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 
 from .data_pipeline import PreparedData
 
+MIN_TRAINING_SAMPLES = 60
+
 
 @dataclass
 class TrainedModels:
@@ -33,7 +35,7 @@ def train_models(prepared: PreparedData) -> TrainedModels:
 
     for fund in prepared.funds:
         subset = prepared.features[prepared.features["fund"] == fund]
-        if len(subset) < 60:
+        if len(subset) < MIN_TRAINING_SAMPLES:
             continue
 
         x = subset[fcols]
@@ -57,7 +59,9 @@ def train_models(prepared: PreparedData) -> TrainedModels:
         regressors[fund] = reg
 
     if not classifiers:
-        raise ValueError("Not enough data to train models. Need at least 60 rows per fund.")
+        raise ValueError(
+            f"Not enough data to train models. Need at least {MIN_TRAINING_SAMPLES} rows per fund."
+        )
 
     return TrainedModels(classifiers=classifiers, regressors=regressors, feature_columns=fcols)
 
