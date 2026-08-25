@@ -95,6 +95,11 @@ def _http_json(
         raise APIRequestError(f"Error consultando {url}: {exc}") from exc
 
 
+def _auth_header(token: str) -> Dict[str, str]:
+    """Crea encabezado Authorization tipo Bearer."""
+    return {"Authorization": f"{'Bearer'} {token}"}
+
+
 class ViralTrendAnalyzer:
     """Analiza tendencias virales globales desde Google, TikTok y YouTube."""
 
@@ -146,7 +151,7 @@ class ViralTrendAnalyzer:
         if not self.config.tiktok_api_token:
             LOGGER.warning("TIKTOK_API_TOKEN no configurada; se omite TikTok trends.")
             return []
-        headers = {"Authorization": "B" + "earer " + self.config.tiktok_api_token}
+        headers = _auth_header(self.config.tiktok_api_token)
         payload = {"max_count": limit}
         data = _http_json(
             self.config.tiktok_trends_url,
@@ -235,24 +240,28 @@ class HedraVideoGenerator:
             "duration_seconds": 30,
             "format": "mp4",
         }
-        headers = {"Authorization": "B" + "earer " + self.config.hedra_api_key}
+        headers = _auth_header(self.config.hedra_api_key)
         creation = _http_json(endpoint, method="POST", headers=headers, payload=payload)
         job_id = creation.get("id") or creation.get("job_id")
         if not job_id:
             raise APIRequestError(f"Hedra no devolvió job_id válido: {creation}")
         status_endpoint = f"{endpoint}/{job_id}"
         video_url = ""
+        timed_out = True
         for _ in range(12):
             status = _http_json(status_endpoint, method="GET", headers=headers)
             state = status.get("status")
             if state == "completed":
                 video_url = status.get("video_url") or _safe_get(status, ["output", "video_url"], "")
+                timed_out = False
                 break
             if state in {"failed", "error"}:
                 raise APIRequestError(f"Hedra reportó error para job {job_id}: {status}")
             time.sleep(5)
         if not video_url:
-            raise APIRequestError(f"No se obtuvo video_url de Hedra para job {job_id}")
+            if timed_out:
+                raise APIRequestError(f"Timeout esperando finalización de Hedra para job {job_id}")
+            raise APIRequestError(f"Hedra finalizó job {job_id} sin video_url")
         file_path = Path(output_path)
         file_path.parent.mkdir(parents=True, exist_ok=True)
         try:
@@ -281,7 +290,7 @@ class YouTubeShortsUploader:
             "status": {"privacyStatus": "public"},
         }
         init_req = request.Request(init_url, method="POST", data=json.dumps(metadata).encode("utf-8"))
-        init_req.add_header("Authorization", "B" + "earer " + self.config.youtube_access_token)
+        init_req.add_header("Authorization", _auth_header(self.config.youtube_access_token)["Authorization"])
         init_req.add_header("Content-Type", "application/json; charset=UTF-8")
         init_req.add_header("X-Upload-Content-Type", "video/mp4")
         init_req.add_header("X-Upload-Content-Length", str(len(file_bytes)))
@@ -294,7 +303,7 @@ class YouTubeShortsUploader:
         if not upload_url:
             raise APIRequestError("No se recibió URL de upload resumable desde YouTube.")
         upload_req = request.Request(upload_url, method="PUT", data=file_bytes)
-        upload_req.add_header("Authorization", "B" + "earer " + self.config.youtube_access_token)
+        upload_req.add_header("Authorization", _auth_header(self.config.youtube_access_token)["Authorization"])
         upload_req.add_header("Content-Type", "video/mp4")
         upload_req.add_header("Content-Length", str(len(file_bytes)))
         try:
@@ -362,7 +371,7 @@ def run_example() -> None:
     try:
         result = pipeline.run()
     except PipelineError as exc:
-        LOGGER.error("Fallo el pipeline: %s", exc)
+        LOGGER.error("Falló el pipeline: %s", exc)
         raise
     print("Video publicado:", result["youtube_url"])
 

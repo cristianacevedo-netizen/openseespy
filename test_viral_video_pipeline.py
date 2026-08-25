@@ -2,9 +2,19 @@
 
 import os
 import unittest
-from unittest.mock import patch
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
-from viral_video_pipeline import AppConfig, HedraVideoGenerator, PipelineError, ViralTrendAnalyzer
+from viral_video_pipeline import (
+    APIRequestError,
+    AppConfig,
+    HedraVideoGenerator,
+    PipelineError,
+    ViralTrendAnalyzer,
+    YouTubeShortsUploader,
+)
 
 
 class ViralVideoPipelineTests(unittest.TestCase):
@@ -46,6 +56,53 @@ class ViralVideoPipelineTests(unittest.TestCase):
         self.assertEqual(config.youtube_api_key, "abc")
         self.assertEqual(config.hedra_api_key, "hedra")
         self.assertEqual(config.output_dir, "tmp-output")
+
+    @patch("viral_video_pipeline.time.sleep", return_value=None)
+    @patch("viral_video_pipeline._http_json")
+    def test_create_video_timeout_raises(self, http_json_mock: MagicMock, _: MagicMock) -> None:
+        config = AppConfig(hedra_api_key="k", hedra_avatar_id="a", hedra_voice_id="v")
+        generator = HedraVideoGenerator(config)
+        http_json_mock.side_effect = [{"job_id": "job-1"}] + [{"status": "processing"}] * 12
+        with TemporaryDirectory() as tmp_dir:
+            output_path = str(Path(tmp_dir) / "video.mp4")
+            with self.assertRaises(APIRequestError):
+                generator.create_video("script", output_path)
+
+    @patch("viral_video_pipeline.request.urlopen")
+    def test_upload_short_returns_video_id(self, urlopen_mock: MagicMock) -> None:
+        config = AppConfig(youtube_access_token="token")
+        uploader = YouTubeShortsUploader(config)
+        with TemporaryDirectory() as tmp_dir:
+            file_path = Path(tmp_dir) / "video.mp4"
+            file_path.write_bytes(b"video-data")
+
+            init_response = MagicMock()
+            init_response.__enter__.return_value = SimpleNamespace(headers={"Location": "https://upload.local"})
+            upload_response = MagicMock()
+            upload_response.__enter__.return_value = SimpleNamespace(read=lambda: b'{"id":"abc123"}')
+            urlopen_mock.side_effect = [init_response.__enter__.return_value, upload_response.__enter__.return_value]
+
+            # wrap side effect in context-manager-compatible function
+            def _urlopen_side_effect(*args, **kwargs):
+                obj = urlopen_mock.side_effect_values.pop(0)
+
+                class _Ctx:
+                    def __enter__(self_inner):
+                        return obj
+
+                    def __exit__(self_inner, exc_type, exc, tb):
+                        return False
+
+                return _Ctx()
+
+            urlopen_mock.side_effect_values = [
+                init_response.__enter__.return_value,
+                upload_response.__enter__.return_value,
+            ]
+            urlopen_mock.side_effect = _urlopen_side_effect
+
+            video_id = uploader.upload_short(str(file_path), "t", "d", ["x"])
+            self.assertEqual(video_id, "abc123")
 
 
 if __name__ == "__main__":

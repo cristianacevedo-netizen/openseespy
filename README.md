@@ -27,11 +27,11 @@ export OUTPUT_DIR="outputs"
 ### Ejemplo de uso
 
 ```bash
-python /home/runner/work/openseespy/openseespy/viral_video_pipeline.py
+python viral_video_pipeline.py
 ```
 
 ### Pruebas del módulo
 
 ```bash
-python -m unittest /home/runner/work/openseespy/openseespy/test_viral_video_pipeline.py
+python -m unittest test_viral_video_pipeline.py
 ```
