@@ -65,7 +65,7 @@ class ViralVideoPipelineTests(unittest.TestCase):
         http_json_mock.side_effect = [{"job_id": "job-1"}] + [{"status": "processing"}] * 12
         with TemporaryDirectory() as tmp_dir:
             output_path = str(Path(tmp_dir) / "video.mp4")
-            with self.assertRaises(APIRequestError):
+            with self.assertRaisesRegex(APIRequestError, "Timeout"):
                 generator.create_video("script", output_path)
 
     @patch("viral_video_pipeline.request.urlopen")
@@ -78,28 +78,13 @@ class ViralVideoPipelineTests(unittest.TestCase):
 
             init_response = MagicMock()
             init_response.__enter__.return_value = SimpleNamespace(headers={"Location": "https://upload.local"})
+            init_response.__exit__.return_value = False
+
             upload_response = MagicMock()
             upload_response.__enter__.return_value = SimpleNamespace(read=lambda: b'{"id":"abc123"}')
-            urlopen_mock.side_effect = [init_response.__enter__.return_value, upload_response.__enter__.return_value]
+            upload_response.__exit__.return_value = False
 
-            # wrap side effect in context-manager-compatible function
-            def _urlopen_side_effect(*args, **kwargs):
-                obj = urlopen_mock.side_effect_values.pop(0)
-
-                class _Ctx:
-                    def __enter__(self_inner):
-                        return obj
-
-                    def __exit__(self_inner, exc_type, exc, tb):
-                        return False
-
-                return _Ctx()
-
-            urlopen_mock.side_effect_values = [
-                init_response.__enter__.return_value,
-                upload_response.__enter__.return_value,
-            ]
-            urlopen_mock.side_effect = _urlopen_side_effect
+            urlopen_mock.side_effect = [init_response, upload_response]
 
             video_id = uploader.upload_short(str(file_path), "t", "d", ["x"])
             self.assertEqual(video_id, "abc123")

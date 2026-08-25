@@ -33,5 +33,5 @@ python viral_video_pipeline.py
 ### Pruebas del módulo
 
 ```bash
-python -m unittest test_viral_video_pipeline.py
+python -m unittest test_viral_video_pipeline
 ```

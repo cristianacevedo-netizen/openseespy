@@ -13,6 +13,9 @@ from urllib import error, parse, request
 
 
 LOGGER = logging.getLogger(__name__)
+DEFAULT_GOOGLE_TRENDS_RSS_URL = "https://trends.google.com/trending/rss?geo=US"
+DEFAULT_TIKTOK_TRENDS_URL = "https://open.tiktokapis.com/v2/research/video/query/"
+DEFAULT_HEDRA_API_BASE_URL = "https://api.hedra.com"
 
 
 class PipelineError(Exception):
@@ -31,13 +34,13 @@ class APIRequestError(PipelineError):
 class AppConfig:
     """Configuración cargada desde variables de entorno."""
 
-    google_trends_rss_url: str = "https://trends.google.com/trending/rss?geo=US"
-    tiktok_trends_url: str = "https://open.tiktokapis.com/v2/research/video/query/"
+    google_trends_rss_url: str = DEFAULT_GOOGLE_TRENDS_RSS_URL
+    tiktok_trends_url: str = DEFAULT_TIKTOK_TRENDS_URL
     tiktok_api_token: str = ""
     youtube_api_key: str = ""
     youtube_access_token: str = ""
     hedra_api_key: str = ""
-    hedra_api_base_url: str = "https://api.hedra.com"
+    hedra_api_base_url: str = DEFAULT_HEDRA_API_BASE_URL
     hedra_avatar_id: str = ""
     hedra_voice_id: str = ""
     output_dir: str = "outputs"
@@ -46,13 +49,13 @@ class AppConfig:
     def from_env(cls) -> "AppConfig":
         """Construye la configuración desde variables de entorno."""
         return cls(
-            google_trends_rss_url=os.getenv("GOOGLE_TRENDS_RSS_URL", cls.google_trends_rss_url),
-            tiktok_trends_url=os.getenv("TIKTOK_TRENDS_URL", cls.tiktok_trends_url),
+            google_trends_rss_url=os.getenv("GOOGLE_TRENDS_RSS_URL", DEFAULT_GOOGLE_TRENDS_RSS_URL),
+            tiktok_trends_url=os.getenv("TIKTOK_TRENDS_URL", DEFAULT_TIKTOK_TRENDS_URL),
             tiktok_api_token=os.getenv("TIKTOK_API_TOKEN", ""),
             youtube_api_key=os.getenv("YOUTUBE_API_KEY", ""),
             youtube_access_token=os.getenv("YOUTUBE_ACCESS_TOKEN", ""),
             hedra_api_key=os.getenv("HEDRA_API_KEY", ""),
-            hedra_api_base_url=os.getenv("HEDRA_API_BASE_URL", cls.hedra_api_base_url),
+            hedra_api_base_url=os.getenv("HEDRA_API_BASE_URL", DEFAULT_HEDRA_API_BASE_URL),
             hedra_avatar_id=os.getenv("HEDRA_AVATAR_ID", ""),
             hedra_voice_id=os.getenv("HEDRA_VOICE_ID", ""),
             output_dir=os.getenv("OUTPUT_DIR", "outputs"),
@@ -97,7 +100,7 @@ def _http_json(
 
 def _auth_header(token: str) -> Dict[str, str]:
     """Crea encabezado Authorization tipo Bearer."""
-    return {"Authorization": f"{'Bearer'} {token}"}
+    return {"Authorization": "Bearer " + token}
 
 
 class ViralTrendAnalyzer:
@@ -222,7 +225,7 @@ class HedraVideoGenerator:
         )
         return script
 
-    def create_video(self, script: str, output_path: str) -> str:
+    def create_video(self, script: str, output_path: str, duration_seconds: int = 30) -> str:
         """Solicita a Hedra generar video y descarga el resultado."""
         required = {
             "HEDRA_API_KEY": self.config.hedra_api_key,
@@ -237,7 +240,7 @@ class HedraVideoGenerator:
             "avatar_id": self.config.hedra_avatar_id,
             "voice_id": self.config.hedra_voice_id,
             "script": script,
-            "duration_seconds": 30,
+            "duration_seconds": duration_seconds,
             "format": "mp4",
         }
         headers = _auth_header(self.config.hedra_api_key)
@@ -247,8 +250,9 @@ class HedraVideoGenerator:
             raise APIRequestError(f"Hedra no devolvió job_id válido: {creation}")
         status_endpoint = f"{endpoint}/{job_id}"
         video_url = ""
+        max_attempts = 12
         timed_out = True
-        for _ in range(12):
+        for attempt in range(max_attempts):
             status = _http_json(status_endpoint, method="GET", headers=headers)
             state = status.get("status")
             if state == "completed":
@@ -257,7 +261,8 @@ class HedraVideoGenerator:
                 break
             if state in {"failed", "error"}:
                 raise APIRequestError(f"Hedra reportó error para job {job_id}: {status}")
-            time.sleep(5)
+            if attempt < max_attempts - 1:
+                time.sleep(5)
         if not video_url:
             if timed_out:
                 raise APIRequestError(f"Timeout esperando finalización de Hedra para job {job_id}")
@@ -338,7 +343,7 @@ class ViralShortsPipeline:
         )
         tags = [item["keyword"] for item in trends[:5]]
         video_path = str(Path(self.config.output_dir) / "viral_short.mp4")
-        generated_path = self.generator.create_video(script, video_path)
+        generated_path = self.generator.create_video(script, video_path, duration_seconds=30)
         youtube_video_id = self.uploader.upload_short(
             file_path=generated_path,
             title=title,
